@@ -1,0 +1,71 @@
+{
+  "$schema": "https://go-skill-scanner.dev/schemas/manifest/v1.json",
+  "$comment": "Reference manifest for go-skill-scanner. Copy and customize for each Skill.",
+
+  "skill": {
+    "name": "example-skill",
+    "version": "1.0.0",
+    "description": "Reference manifest showing all available capability declarations.",
+    "author": "team@example.com",
+    "license": "MIT"
+  },
+
+  "capabilities": {
+    "$comment": "Declare EVERY capability the Skill uses. Undeclared capabilities = HIGH severity finding.",
+
+    "network": {
+      "enabled": true,
+      "allowed_domains": [
+        "api.example.com",
+        "cdn.example.com"
+      ],
+      "allowed_protocols": ["https"],
+      "block_private_ranges": true,
+      "$comment": "block_private_ranges prevents SSRF attacks by blocking RFC1918 addresses."
+    },
+
+    "filesystem": {
+      "enabled": false,
+      "read_paths": [],
+      "write_paths": [],
+      "$comment": "Disable filesystem access unless strictly required. Each path is a glob pattern."
+    },
+
+    "subprocess": {
+      "enabled": false,
+      "allowed_commands": [],
+      "$comment": "Subprocess execution is HIGH risk. Requires explicit security review."
+    },
+
+    "environment_variables": {
+      "enabled": false,
+      "allowed_keys": [],
+      "$comment": "Restrict env var access to prevent token/secret exfiltration."
+    },
+
+    "llm_calls": {
+      "enabled": false,
+      "allowed_models": [],
+      "$comment": "Nested LLM calls must be declared to prevent prompt injection chains."
+    },
+
+    "code_execution": {
+      "enabled": false,
+      "$comment": "Dynamic code execution (eval, exec, importlib) is CRITICAL risk."
+    }
+  },
+
+  "data_handling": {
+    "processes_pii": false,
+    "stores_data": false,
+    "data_retention_days": 0,
+    "$comment": "Set processes_pii: true to trigger automatic PII obfuscation before LLM analysis."
+  },
+
+  "scanner_policy": {
+    "require_llm_review": false,
+    "block_on_suspect": false,
+    "audit_all_invocations": true,
+    "$comment": "Deployment-level policy overrides. Can be set globally in scanner config."
+  }
+}
