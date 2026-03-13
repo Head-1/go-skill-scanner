@@ -1,6 +1,6 @@
 # Estrutura do Projeto - Go-Skill-Scanner
 
-Gerado em: sex 13 mar 2026 00:55:28 UTC
+Gerado em: sex 13 mar 2026 04:35:28 UTC
 
 ```
 .
@@ -14,10 +14,12 @@ Gerado em: sex 13 mar 2026 00:55:28 UTC
 │   ├── architecture
 │   │   ├── ENGINE_MAIN_REFACTORING.md
 │   │   └── PROJECT_STRUCTURE.md
+│   ├── CHECKLIST_OFICIAL.md
 │   ├── examples
 │   │   └── yara_integration.go
 │   ├── memorandos
-│   │   └── 02-YARA_Refactoring.md
+│   │   ├── 01-Go_Skill_Scanner-Criação_Fase-01.md
+│   │   └── 02-YARA_Refactoring_Fase-2.md
 │   └── README.md
 ├── go.mod
 ├── go.sum
@@ -58,5 +60,5 @@ Gerado em: sex 13 mar 2026 00:55:28 UTC
 ├── README.md
 └── test_payload.py
 
-28 directories, 26 files
+28 directories, 28 files
 ```
