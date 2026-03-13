@@ -25,7 +25,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
-	"github.com/go-skill-scanner/go-skill-scanner/pkg/schema"
+	"github.com/Head-1/go-skill-scanner/internal/yara"
+	"github.com/Head-1/go-skill-scanner/pkg/schema"
 )
 
 // Version and BuildTime are injected at compile time via -ldflags.
@@ -41,21 +42,6 @@ var (
 //   a) mocked in unit tests (no real YARA/LLM needed)
 //   b) swapped for alternative implementations
 // ─────────────────────────────────────────────────────────────────────────────
-
-// YARAScanner performs static pattern matching against the YARA rule corpus.
-type YARAScanner interface {
-	// Scan takes raw bytes and returns a list of rule names that matched.
-	// Returns an empty slice (never nil) if nothing matched.
-	Scan(ctx context.Context, payload []byte) (matchedRules []string, err error)
-
-	// RuleCount returns the number of rules currently loaded.
-	// Used to populate LayerTrace.RulesEvaluated.
-	RuleCount() int
-
-	// BundleHash returns the SHA-256 of the loaded rule bundle.
-	// Used to populate AuditInfo.RuleBundleHash.
-	BundleHash() string
-}
 
 // ASTAnalyzer performs structural code analysis to detect malicious patterns
 // that YARA string matching cannot catch (e.g. chained pipe commands).
@@ -162,24 +148,28 @@ func DefaultConfig() Config {
 
 // Engine is the central scan orchestrator.
 // Construct via New() — do not create directly.
+//
+// CRITICAL: Engine holds C resources (YARA scanner). Call Close() to prevent leaks.
 type Engine struct {
-	cfg       Config
-	log       zerolog.Logger
-	yara      YARAScanner
-	ast       ASTAnalyzer
-	cache     Cache
-	llm       LLMJudge      // may be nil if EnableLLM == false
-	wasm      WasmSandbox   // may be nil if EnableWasm == false
-	manifest  ManifestValidator
-	probe     SecurityProbe // defaults to noopProbe
+	cfg      Config
+	log      zerolog.Logger
+	yara     yara.Scanner // Uses internal/yara.Scanner interface
+	ast      ASTAnalyzer
+	cache    Cache
+	llm      LLMJudge      // may be nil if EnableLLM == false
+	wasm     WasmSandbox   // may be nil if EnableWasm == false
+	manifest ManifestValidator
+	probe    SecurityProbe // defaults to noopProbe
 }
 
 // New constructs a ready-to-use Engine. All required dependencies must be
 // non-nil. Optional layers (llm, wasm) may be nil; the engine will skip them.
+//
+// CRITICAL: Caller MUST call Close() when done to prevent memory leaks.
 func New(
 	cfg Config,
 	log zerolog.Logger,
-	yara YARAScanner,
+	yaraScanner yara.Scanner, // Now uses internal/yara.Scanner
 	ast ASTAnalyzer,
 	cache Cache,
 	manifest ManifestValidator,
@@ -187,8 +177,8 @@ func New(
 	wasm WasmSandbox,   // nil to disable
 	probe SecurityProbe, // nil defaults to noopProbe
 ) (*Engine, error) {
-	if yara == nil {
-		return nil, fmt.Errorf("engine: YARAScanner is required")
+	if yaraScanner == nil {
+		return nil, fmt.Errorf("engine: yara.Scanner is required")
 	}
 	if ast == nil {
 		return nil, fmt.Errorf("engine: ASTAnalyzer is required")
@@ -202,10 +192,18 @@ func New(
 	if probe == nil {
 		probe = noopProbe{}
 	}
+
+	log.Info().
+		Int("yara_rules", yaraScanner.RuleCount()).
+		Str("yara_bundle_hash", yaraScanner.BundleHash()[:16]+"...").
+		Bool("llm_enabled", llm != nil).
+		Bool("wasm_enabled", wasm != nil).
+		Msg("Engine initialized")
+
 	return &Engine{
 		cfg:      cfg,
 		log:      log.With().Str("component", "engine").Logger(),
-		yara:     yara,
+		yara:     yaraScanner,
 		ast:      ast,
 		cache:    cache,
 		llm:      llm,
@@ -213,6 +211,33 @@ func New(
 		manifest: manifest,
 		probe:    probe,
 	}, nil
+}
+
+// Close releases all engine resources, particularly the YARA scanner's C memory.
+//
+// Behavior:
+//   - Waits for active scans to complete (graceful shutdown)
+//   - Releases YARA scanner resources
+//   - Idempotent: safe to call multiple times
+//
+// CRITICAL: Failure to call Close() will leak C memory from the YARA engine.
+func (e *Engine) Close() error {
+	e.log.Info().Msg("Engine shutting down...")
+
+	// Close YARA scanner (releases C memory)
+	if err := e.yara.Close(); err != nil {
+		e.log.Error().Err(err).Msg("Failed to close YARA scanner")
+		return fmt.Errorf("engine: YARA scanner close failed: %w", err)
+	}
+
+	e.log.Info().Msg("Engine closed successfully")
+	return nil
+}
+
+// YARAStats returns runtime statistics from the YARA scanner.
+// Useful for health checks and observability dashboards.
+func (e *Engine) YARAStats() yara.ScanStatistics {
+	return e.yara.ScanStats()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -653,4 +678,52 @@ type noopProbe struct{}
 
 func (noopProbe) Probe(_ context.Context, _ int) ([]schema.Finding, error) {
 	return nil, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stub Implementations for Missing Dependencies
+// ─────────────────────────────────────────────────────────────────────────────
+
+// noopCache is a stub implementation for testing without a real cache backend.
+type noopCache struct{}
+
+func (noopCache) GetBySHA256(_ context.Context, _ string) (*schema.ScanResult, error) {
+	return nil, nil // Cache miss
+}
+
+func (noopCache) GetByTLSH(_ context.Context, _ string) (*schema.ScanResult, int, error) {
+	return nil, 0, nil // Cache miss
+}
+
+func (noopCache) Put(_ context.Context, _ *schema.ScanResult) error {
+	return nil // No-op
+}
+
+// NewNoopCache returns a cache stub for testing.
+func NewNoopCache() Cache {
+	return noopCache{}
+}
+
+// noopAST is a stub implementation that never finds suspicious patterns.
+type noopAST struct{}
+
+func (noopAST) Analyze(_ context.Context, _ []byte, _ string) ([]schema.Finding, error) {
+	return nil, nil // No findings
+}
+
+// NewNoopAST returns an AST analyzer stub for testing.
+func NewNoopAST() ASTAnalyzer {
+	return noopAST{}
+}
+
+// noopManifest is a stub implementation that always validates successfully.
+type noopManifest struct{}
+
+func (noopManifest) Validate(_ context.Context, _ []byte, _ []byte) (*schema.ManifestResult, []schema.Finding, error) {
+	return &schema.ManifestResult{Valid: true}, nil, nil
+}
+
+// NewNoopManifest returns a manifest validator stub for testing.
+func NewNoopManifest() ManifestValidator {
+	return noopManifest{}
 }

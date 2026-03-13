@@ -5,7 +5,12 @@ Security scanner para AI agent skills.
 ## Características
 - YARA + AST
 - Docker-first
+<<<<<<< HEAD
 # go-skill-scanner
+=======
+
+#🔍 go-skill-scanner
+>>>>>>> f331d26 (feat: refatoração de elite, integração Cobra CLI e documentação de arquitetura)
 
 Security Scanner for AI Agent Skills — Uma ferramenta de análise de segurança para skills 
 de agentes de IA, escrita em Go.
@@ -136,4 +141,6 @@ Repositório: https://github.com/Head-1/go-skill-scanner
 
 
 ⭐ Se este projeto te ajudou, considere dar uma estrela!
+<<<<<<< HEAD
 headmaster@npcaia-daemon:~/go-skill-scanner$ 
+=======
