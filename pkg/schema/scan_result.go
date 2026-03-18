@@ -7,6 +7,13 @@ package schema
 
 import "time"
 
+// Status globais de processamento (usados pelo Engine e EventBus)
+const (
+	StatusPending   = "PENDING"
+	StatusRunning   = "RUNNING"
+	StatusCompleted = "COMPLETED"
+	StatusFailed    = "FAILED"
+)
 // ─────────────────────────────────────────────────────────────────────────────
 // Top-level Result
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  gss-mcp:
+    build:
+      context: .
+      dockerfile: build/Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+        BUILDTIME: ${BUILDTIME:-unknown}
+        COMMIT: ${COMMIT:-unknown}
+    image: go-skill-scanner:latest
+    container_name: gss-mcp
+    command: ["./scanner", "mcp", "--addr=:8081"]
+    ports:
+      - "8081:8081"
+    networks:
+      - suta_backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Volume para regras YARA personalizadas (opcional)
+    volumes:
+      - ./internal/yara/rules:/app/rules:ro
+
+networks:
+  suta_backend:
+    external: true
+    name: suta_backend  # A rede que o SUTA já usa

@@ -1,10 +1,9 @@
 rule Network_Socket_Usage {
-    meta:
-        description = "Detecta criação de sockets de rede"
-    strings:
-        $socket = "socket.socket"
-        $connect = ".connect(("
-        $requests = /requests\.(get|post|put|delete)/
-    condition:
-        any of them
+	meta:
+		category = "network"
+	strings:
+		$s1 = "socket"
+		$s2 = "connect"
+	condition:
+		any of them
 }

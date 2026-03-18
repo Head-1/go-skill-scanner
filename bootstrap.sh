@@ -1,99 +1,79 @@
 #!/bin/bash
-# ==============================================================================
-# Script de Inicialização NPCAIA-Daemon - go-skill-scanner
-# Função: Prover infraestrutura, dependências e corpus de regras YARA.
-# ==============================================================================
+set -e
 
-set -e # Abortar em caso de erro
+echo "╔══════════════════════════════════════════════════════════╗"
+echo "║  GO-SKILL-SCANNER - Bootstrap (Curadoria Interna)       ║"
+echo "║  Verificando integridade das regras YARA locais         ║"
+echo "╚══════════════════════════════════════════════════════════╝"
+
+RULES_DIR="internal/yara/rules"
 
 # Cores para output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}🏗️  Iniciando Scaffolding Profissional: go-skill-scanner${NC}"
-
-# 1. Verificação de Dependências Críticas
-echo -e "${YELLOW}🔍 Verificando ambiente de desenvolvimento...${NC}"
-
-check_dep() {
-    if ! command -v $1 &> /dev/null; then
-        echo -e "${RED}❌ ERRO: $1 não encontrado. Instale-o para prosseguir.${NC}"
-        exit 1
-    fi
-}
-
-check_dep "go"
-check_dep "curl"
-check_dep "gcc"
-check_dep "pkg-config"
-
-# Verificação específica para desenvolvimento YARA (CGO)
-if ! pkg-config --exists yara; then
-    echo -e "${YELLOW}⚠️  Aviso: libyara-dev não detectada via pkg-config.${NC}"
-    echo -e "Para builds CGO, execute: sudo apt-get install -y libyara-dev"
+# Verificar se diretório de regras existe
+if [ ! -d "$RULES_DIR" ]; then
+    echo -e "${YELLOW}📁 Criando diretório de regras...${NC}"
+    mkdir -p "$RULES_DIR"/{capabilities,core,custom,malicious}
 fi
 
-# 2. Criação da Estrutura de Diretórios (Hierarquia Estrita)
-echo -e "${YELLOW}📁 Criando hierarquia de diretórios...${NC}"
+# Verificar se existem arquivos .yar
+YAR_COUNT=$(find "$RULES_DIR" -name "*.yar" 2>/dev/null | wc -l)
 
-DIRS=(
-    "cmd/scanner"
-    "internal/engine"
-    "internal/yara/rules/cisco_official"
-    "internal/yara/rules/custom"
-    "internal/ast"
-    "internal/cache"
-    "internal/manifest"
-    "internal/llm"
-    "internal/sandbox"
-    "internal/privacy"
-    "internal/audit"
-    "internal/transport/mcp"
-    "internal/transport/cli"
-    "pkg/schema"
-    "docs/examples"
-    "docs/memorandos"
-    "build"
-    "configs"
-)
-
-for dir in "${DIRS[@]}"; do
-    if [ ! -d "$dir" ]; then
-        mkdir -p "$dir"
-        echo -e "  ${GREEN}✓${NC} Criado: $dir"
-    fi
-done
-
-# 3. Importação do Corpus de Regras (Tier 1)
-echo -e "${YELLOW}📥 Sincronizando regras YARA (Cisco Talos / Community)...${NC}"
-
-RULES_DEST="internal/yara/rules/cisco_official/cisco_official.yar"
-# URL oficial das regras do projeto original
-RULES_URL="https://raw.githubusercontent.com/cisco-open/skill-scanner/main/skill_scanner/rules/malicious_patterns.yar"
-
-curl -sSL "$RULES_URL" -o "$RULES_DEST"
-
-if [ $? -eq 0 ] && [ -s "$RULES_DEST" ]; then
-    RULE_COUNT=$(grep -c "rule " "$RULES_DEST")
-    echo -e "${GREEN}✅ Regras importadas: $RULE_COUNT assinaturas detectadas.${NC}"
-    echo -e "${BLUE}Hash MD5:${NC} $(md5sum "$RULES_DEST" | cut -d' ' -f1)"
-else
-    echo -e "${RED}❌ Erro crítico: Falha ao baixar ou validar o arquivo de regras.${NC}"
+if [ "$YAR_COUNT" -eq 0 ]; then
+    echo -e "${RED}❌ Nenhuma regra YARA encontrada em $RULES_DIR${NC}"
+    echo ""
+    echo "A arquitetura do GO-SKILL-SCANNER requer regras locais embutidas via go:embed."
+    echo "Por favor, adicione regras YARA manualmente em:"
+    echo "  $RULES_DIR/capabilities/"
+    echo "  $RULES_DIR/core/"
+    echo "  $RULES_DIR/custom/"
+    echo "  $RULES_DIR/malicious/"
+    echo ""
+    echo "Regras mínimas recomendadas:"
+    echo "  - system_risk.yar (detecção de chamadas de sistema)"
+    echo "  - network_risk.yar (detecção de atividade de rede)"
+    echo "  - obfuscation.yar  (detecção de ofuscação)"
+    echo ""
     exit 1
 fi
 
-# 4. Inicialização de Módulos (se necessário)
-if [ ! -f "go.mod" ]; then
-    echo -e "${YELLOW}📦 Inicializando módulo Go...${NC}"
-    go mod init github.com/Head-1/go-skill-scanner
-fi
+# Verificar regras obrigatórias mínimas
+MISSING=0
+REQUIRED_PATTERNS=("system_risk" "network_risk")
 
-# 5. Finalização
-echo -e "\n${GREEN}🚀 Scaffolding concluído com sucesso.${NC}"
-echo -e "Próximos passos:"
-echo -e "  1. Rode ${BLUE}go mod tidy${NC} para sincronizar dependências."
-echo -e "  2. Teste o motor com ${BLUE}go test ./internal/yara/... -v${NC}"
-echo -e "  3. Compile o scanner: ${BLUE}go build -o scanner ./cmd/scanner${NC}\n"
+for pattern in "${REQUIRED_PATTERNS[@]}"; do
+    if ! find "$RULES_DIR" -name "*${pattern}*.yar" | grep -q .; then
+        echo -e "${YELLOW}⚠️  Regra recomendada não encontrada: ${pattern}${NC}"
+        MISSING=$((MISSING + 1))
+    fi
+done
+
+# Verificar estrutura de diretórios
+echo -e "\n${GREEN}✅ Estrutura de regras verificada:${NC}"
+for dir in capabilities core custom malicious; do
+    if [ -d "$RULES_DIR/$dir" ]; then
+        COUNT=$(find "$RULES_DIR/$dir" -name "*.yar" 2>/dev/null | wc -l)
+        echo "   - $dir: $COUNT regras"
+    else
+        echo -e "   - $dir: ${YELLOW}não existe${NC}"
+        mkdir -p "$RULES_DIR/$dir"
+    fi
+done
+
+echo ""
+echo -e "${GREEN}📊 Total de regras: $YAR_COUNT${NC}"
+echo -e "${GREEN}🔒 Modo offline: Regras embutidas via go:embed${NC}"
+
+# Gerar arquivo de manifesto (opcional)
+cat > "$RULES_DIR/.manifest" << EOF
+# Manifesto das Regras YARA
+# Gerado em: $(date)
+# Total: $YAR_COUNT regras
+# Curadoria: Interna (sem dependências externas)
+EOF
+
+echo -e "${GREEN}✅ Bootstrap concluído. Pronto para build.${NC}"

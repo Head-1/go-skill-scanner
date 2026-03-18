@@ -1,23 +1,28 @@
-rule Suspect_Process_Execution {
+rule PrivilegeEscalation {
     meta:
-        description = "Detecta execução de comandos de sistema em scripts"
-        severity = "MEDIUM"
+        description = "Detects privilege escalation attempts"
+        severity = "critical"
+        category = "capability"
     strings:
-        $python_os = /os\.(system|popen|spawn)/
-        $python_sub = /subprocess\.(run|Popen|call)/
-        $node_child = /child_process\.(exec|spawn)/
+        $sudo = "sudo" nocase
+        $su = "su " nocase
+        $chown = "chown" nocase
+        $setuid = "setuid" nocase
+        $capability = "CAP_" nocase
     condition:
         any of them
 }
 
-rule Network_Socket_Opening {
+rule KernelModule {
     meta:
-        description = "Detecta abertura de sockets de rede"
-        severity = "HIGH"
+        description = "Detects kernel module loading"
+        severity = "critical"
+        category = "capability"
     strings:
-        $socket = "socket.socket"
-        $http_req = /requests\.(get|post|put|delete)/
-        $urllib = "urllib.request"
+        $insmod = "insmod" nocase
+        $rmmod = "rmmod" nocase
+        $modprobe = "modprobe" nocase
+        $kmod = "kmod" nocase
     condition:
         any of them
 }
