@@ -22,9 +22,9 @@
 - [x] Escolher biblioteca YARA (hillu/go-yara/v4 com CGO)
 - [x] Definir estratégia de isolamento (go:embed para regras)
 - [x] Documentar decisões arquiteturais (Memorando Fase 01)
-- [ ] **Definir arquitetura de eventos (Event Bus interno)**
-- [ ] **Definir estratégia de agnosticismo de LLM (Provider Interface)**
-- [ ] **Definir modelo de persistência dual (Cache + Audit Store)**
+- [x] **Definir arquitetura de eventos (Event Bus interno)**
+- [x] **Definir estratégia de agnosticismo de LLM (Provider Interface)**
+- [x] **Definir modelo de persistência dual (Cache + Audit Store)**
 
 ### Estrutura de Diretórios
 - [x] Criar estrutura seguindo Standard Go Project Layout
@@ -36,14 +36,14 @@
 - [x] Configurar diretório `build/`
 - [x] Configurar diretório `configs/`
 - [x] Configurar diretório `docs/`
-- [ ] Criar diretório `internal/ast/`
-- [ ] Criar diretório `internal/cache/` (performance cache)
-- [ ] **Criar diretório `internal/audit/` (audit store de longo prazo)**
+- [x] Criar diretório `internal/ast/`
+- [x] Criar diretório `internal/cache/` (performance cache)
+- [x] **Criar diretório `internal/audit/` (audit store de longo prazo)**
 - [ ] **Criar diretório `internal/llm/` (provider-agnostic)**
-- [ ] **Criar diretório `internal/llm/providers/` (Anthropic, OpenAI, Gemini, etc.)**
-- [ ] **Criar diretório `internal/events/` (event bus & messaging)**
-- [ ] **Criar diretório `internal/transport/mcp/` (Model Context Protocol)**
-- [ ] Criar diretório `internal/manifest/`
+- [x] **Criar diretório `internal/llm/providers/` (Anthropic, OpenAI, Gemini, etc.)**
+- [x] **Criar diretório `internal/events/` (event bus & messaging)**
+- [x] **Criar diretório `internal/transport/mcp/` (Model Context Protocol)**
+- [x] Criar diretório `internal/manifest/`
 - [ ] Criar diretório `internal/sandbox/`
 
 ### Configuração Inicial
@@ -279,39 +279,39 @@
 **NOVA SEÇÃO — Processamento Assíncrono para Alta Carga**
 
 ### Planejamento Event Bus
-- [ ] Definir arquitetura de eventos (pub/sub interno)
-- [ ] Escolher backend (**Go channels para single-node, NATS para cluster**)
-- [ ] Definir event schemas (ScanRequested, YARACompleted, ASTCompleted, etc.)
+- [x] Definir arquitetura de eventos (pub/sub interno)
+- [x] Escolher backend (**Go channels para single-node, NATS para cluster**)
+- [x] Definir event schemas (ScanRequested, YARACompleted, ASTCompleted, etc.)
 - [ ] Documentar topologia de mensagens
 - [ ] Estabelecer garantias de entrega (at-least-once vs exactly-once)
 
 ### Implementação Event Bus (Single-Node)
-- [ ] Criar `internal/events/bus.go`
-- [ ] Implementar EventBus usando Go channels
-- [ ] Implementar `Publish(event Event)` method
-- [ ] Implementar `Subscribe(topic string) <-chan Event` method
+- [x] Criar `internal/events/bus.go`
+- [x] Implementar EventBus usando Go channels
+- [x] Implementar `Publish(event Event)` method
+- [x] Implementar `Subscribe(topic string) <-chan Event` method
 - [ ] Implementar `Unsubscribe()` cleanup
-- [ ] Implementar buffer sizes configuráveis
-- [ ] Implementar backpressure handling
-- [ ] Implementar graceful shutdown (drain events)
+- [x] Implementar buffer sizes configuráveis
+- [x] Implementar backpressure handling
+- [x] Implementar graceful shutdown (drain events)
 
 ### Event Types
-- [ ] Definir: `ScanRequestedEvent` (payload + metadata)
+- [x] Definir: `ScanRequestedEvent` (payload + metadata)
 - [ ] Definir: `YARACompletedEvent` (matches + metrics)
 - [ ] Definir: `ASTCompletedEvent` (findings + score)
 - [ ] Definir: `LLMRequestedEvent` (ambiguous case)
 - [ ] Definir: `LLMCompletedEvent` (verdict + confidence)
-- [ ] Definir: `ScanCompletedEvent` (final result)
+- [x] Definir: `ScanCompletedEvent` (final result)
 - [ ] Definir: `CacheWriteEvent` (async cache update)
 - [ ] Definir: `AuditLogEvent` (audit store write)
 
 ### Worker Pools
-- [ ] Implementar YARA worker pool (concurrent scans)
+- [x] Implementar YARA worker pool (concurrent scans)
 - [ ] Implementar AST worker pool
 - [ ] Implementar LLM worker pool (rate limiting)
 - [ ] Implementar Cache worker (batch writes)
 - [ ] Implementar Audit worker (batch writes)
-- [ ] Configurar pool sizes via config (default: NumCPU)
+- [x] Configurar pool sizes via config (default: NumCPU)
 
 ### NATS Integration (Cluster Mode — Opcional)
 - [ ] Criar `internal/events/nats.go`
@@ -322,23 +322,23 @@
 - [ ] Documentar deployment com NATS cluster
 
 ### Testes Event Bus
-- [ ] Teste: Publish/Subscribe básico
-- [ ] Teste: Multiple subscribers
+- [x] Teste: Publish/Subscribe básico
+- [x] Teste: Multiple subscribers
 - [ ] Teste: Event ordering (FIFO)
-- [ ] Teste: Backpressure handling
-- [ ] Teste: Graceful shutdown (no event loss)
-- [ ] Teste: Worker pool concurrency
+- [x] Teste: Backpressure handling
+- [x] Teste: Graceful shutdown (no event loss)
+- [x] Teste: Worker pool concurrency
 - [ ] Benchmark: Throughput (>100K events/sec)
 - [ ] Benchmark: Latency (p99 <10ms)
 
 ### Integração Event Bus → Engine
-- [ ] Refatorar Engine para async pipeline
+- [x] Refatorar Engine para async pipeline
 - [ ] YARA scan → publish `YARACompletedEvent`
 - [ ] AST analysis → subscribe `YARACompletedEvent`
 - [ ] LLM judge → subscribe ambiguous cases
 - [ ] Cache updates → async via events
 - [ ] Audit logging → async via events
-- [ ] Validar end-to-end async flow
+- [x] Validar end-to-end async flow
 
 ### Monitoring & Observability
 - [ ] Implementar métricas de event bus
@@ -721,7 +721,7 @@
 - [x] Memorando Fase 02 (YARA Refactoring)
 - [x] Memorando Fase 03 (Engine & Main)
 - [x] README.md do módulo YARA
-- [ ] **Memorando Fase 04 (Event Bus & Async Pipeline)**
+- [x] Memorando Fase 04 (Event Bus & Async Pipeline)
 - [ ] **Memorando Fase 05 (Audit Store & Compliance)**
 - [ ] **Memorando Fase 06 (LLM Agnosticism & MCP)**
 - [ ] README.md do projeto completo
@@ -760,18 +760,18 @@
 - [ ] AST Analyzer: Pattern detection tests (multi-language)
 - [ ] Cache: Lookup/storage tests (BadgerDB)
 - [ ] **Audit Store: CRUD tests (SQLite/PostgreSQL)**
-- [ ] **Event Bus: Pub/sub tests (channels/NATS)**
+- [x] **Event Bus: Pub/sub tests (channels/NATS)**
 - [ ] LLM: Provider interface tests (todos providers)
 - [ ] LLM: Judge orchestration tests (fallback chain)
 - [ ] Manifest: Validation tests
 
 ### Integration Tests
-- [ ] End-to-end: Clean payload scan (sync + async)
+- [x] End-to-end: Clean payload scan (sync + async)
 - [ ] End-to-end: Malicious payload detection (full pipeline)
 - [ ] End-to-end: Cache hit/miss flow
 - [ ] End-to-end: LLM escalation (ambiguous case)
-- [ ] End-to-end: Graceful shutdown (Ctrl+C, event drain)
-- [ ] **End-to-end: Event Bus async pipeline (YARA → AST → LLM)**
+- [x] End-to-end: Graceful shutdown (Ctrl+C, event drain)
+- [x] **End-to-end: Event Bus async pipeline (YARA → AST → LLM)**
 - [ ] **End-to-end: Audit Store persistence (write + query)**
 - [ ] **End-to-end: Provider fallback (primary fail → secondary)**
 - [ ] **End-to-end: Multi-provider comparison (A/B test)**
@@ -821,8 +821,8 @@
 - [ ] Performance targets atingidos
 
 ### 🔄 Milestone 4.5: Event Bus & Audit (EM PROGRESSO)
-- [ ] **Event Bus implementado (Go channels + NATS opcional)**
-- [ ] **Async pipeline validado (YARA → AST → LLM)**
+- [x] **Event Bus implementado (Go channels + NATS opcional)**
+- [x] **Async pipeline validado (YARA → AST → LLM)**
 - [ ] **Audit Store implementado (SQLite + PostgreSQL opcional)**
 - [ ] **Retention policies configuradas**
 - [ ] **Throughput target: >10K scans/sec**
@@ -857,7 +857,7 @@
 - [ ] Zero memory leaks (valgrind clean)
 - [ ] Zero race conditions (go test -race)
 - [ ] Linter: golangci-lint clean
-- [ ] **Zero event loss (Event Bus graceful shutdown)**
+- [x] **Zero event loss (Event Bus graceful shutdown)**
 
 ### Performance
 - [ ] Cold start: <100ms
@@ -961,3 +961,7 @@
 🌍 **Multi-Provider** — Escolha o melhor LLM para cada caso  
 
 **"O scanner que não pertence a ninguém, pertence a todos."**
+
+
+**Última Atualização:** 2026-03-17 (Sprint 2.5 Parcialmente Concluída - Event Bus 51%)
+###By: Headmaster 21:59
