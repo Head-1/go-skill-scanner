@@ -1,6 +1,4 @@
 .
-├── ataque.py
-├── ataque_v2.py
 ├── bootstrap.sh
 ├── build
 │   └── Dockerfile
@@ -15,6 +13,7 @@
 │   │   ├── ENGINE_MAIN_REFACTORING.md
 │   │   └── PROJECT_STRUCTURE.md
 │   ├── CHECKLIST_OFICIAL.md
+│   ├── CHECK_LIST_PROJECT.md
 │   ├── examples
 │   │   └── yara_integration.go
 │   ├── memorandos
@@ -55,7 +54,6 @@
 │   ├── transport
 │   │   ├── cli
 │   │   └── mcp
-│   │       ├── handler.go.bak
 │   │       ├── handler_test.go
 │   │       ├── server.go
 │   │       ├── server_test.go
@@ -90,8 +88,12 @@
 ├── scripts
 │   ├── test_mcp_handshake.sh
 │   └── test_mcp_integration.sh
-├── test_malicious.py
 ├── test_payload.py
-└── trigger.py
+└── tests
+    └── payloads
+        ├── ataque.py
+        ├── ataque_v2.py
+        ├── test_malicious.py
+        └── trigger.py
 
-37 directories, 58 files
+39 directories, 58 files
