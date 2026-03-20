@@ -10,7 +10,9 @@
 
 ## 1. RESUMO EXECUTIVO
 
-O **Engine** foi transformado no coração reativo do GSS. Abandonamos o modelo de execução sequencial em favor de um sistema de **despacho e escuta**. Agora, o Engine é responsável por validar a entrada, gerar identidades únicas de scan e orquestrar a passagem do payload pelos múltiplos Tiers de segurança sem bloquear a interface de chamada (CLI ou MCP).
+O **Engine** foi transformado no coração reativo do GSS. Abandonamos o modelo de execução sequencial em favor de um sistema de **despacho e escuta**. 
+Agora, o Engine é responsável por validar a entrada, gerar identidades únicas de scan e orquestrar a passagem do payload pelos múltiplos Tiers de 
+segurança sem bloquear a interface de chamada (CLI ou MCP).
 
 ### Evoluções Chave:
 - **Identidade Única:** Todo scan agora nasce com um `ScanID` (UUID v4) para rastreabilidade forense.
@@ -105,6 +107,3 @@ Projeto: go-skill-scanner
 
 ---
 
-**Headmaster, este memorando agora reflete a realidade técnica do que acabamos de compilar.**
-
-Como o Engine e o Event Bus estão estabilizados, o GSS já consegue processar arquivos de forma assíncrona. **Podemos agora focar na criação do `internal/ast/patterns.go` para começar a pegar os casos onde o YARA é "cego".**

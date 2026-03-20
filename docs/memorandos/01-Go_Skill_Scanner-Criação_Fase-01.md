@@ -1,83 +1,136 @@
-**MEMORANDO TÉCNICO DE FUNDAÇÃO — FASE 01 (REFATORADO E ATUALIZADO)**
+# MEMORANDO TÉCNICO DE FUNDAÇÃO — FASE 01
 
-**PARA:** Desenvolvedores e Mantenedores
+**PARA:** Desenvolvedores e Mantenedores do `go-skill-scanner`
 **DE:** Headmaster Orquestrador de IA
-**PROJETO:** `go-skill-scanner` (Daemon de Segurança Soberano)
-**DATA DE REVISÃO:** 17 de Março de 2026
-**AMBIENTE:** Ubuntu Server 24.04 LTS | Go 1.25+ | Docker 29.3.0+
+**PROJETO:** `go-skill-scanner` (GSS) – Daemon de Segurança Soberano
+**DATA DA CRIAÇÃO INICIAL:** 2026-03-12
+**ÚLTIMA REVISÃO:** 2026-03-19
 **STATUS:** ✅ FUNDAÇÃO CONSOLIDADA, TESTADA E DOCUMENTADA
 
 ---
 
 ## 1. RESUMO EXECUTIVO (INCEPTION)
 
-O projeto `go-skill-scanner` (GSS) nasceu da necessidade de criar um daemon de segurança de código soberano, ultrarrápido e isolado. Projetado para rodar em ambientes Linux restritos e de Edge AI (como VMs Ubuntu Server e hardwares dedicados como o Jetson Orin Nano), o sistema deve identificar padrões maliciosos em scripts (Python, Bash, Node) antes que eles sejam executados.
+O **go-skill-scanner** nasceu da necessidade de criar um motor de segurança de código aberto, soberano e ultrarrápido, capaz de analisar scripts e “skills” de IA (Python, Bash, etc.) em busca de comportamentos maliciosos. Diferentemente de ferramentas puramente baseadas em assinaturas, o GSS foi concebido com uma arquitetura em camadas (tiering) que combina análise estática de alta velocidade (YARA) com análise sintática (AST) e, futuramente, com heurística via LLMs locais.
 
-**A Diretriz Principal:** Isolamento total e Zero Trust. O scanner não deve ter dependências ou correlações diretas com outros sistemas externos não autorizados, atuando como o executor rigoroso das leis digitais definidas pela governança do SUTA-IA.
+A diretriz principal desde o início foi o **isolamento total e zero trust**: o scanner não deve depender de chamadas de rede externas em tempo de execução, e todo o conhecimento (regras) deve estar embutido no binário, permitindo operação em ambientes **air-gapped** e com a máxima performance.
+
+---
 
 ## 2. DECISÕES ARQUITETURAIS FUNDACIONAIS
 
-Na Fase 01, estabelecemos os pilares tecnológicos que permitiram o sucesso da compilação e estabilização do daemon.
-
 ### 2.1 A Escolha da Linguagem: Go (Golang)
-Em vez de Python (comum em segurança, porém lento e consumidor de RAM), optamos pelo Go pelos seguintes motivos táticos:
-* **Binário Estático Único:** Facilidade de deploy em qualquer máquina Linux sem necessidade de instalar interpretadores, garantindo uma imagem Docker mínima (~15MB).
-* **Performance de Borda:** Tempos de inicialização em milissegundos e consumo de memória altamente otimizado para hardwares com restrição de recursos.
-* **Segurança de Tipos e Concorrência:** Tratamento rigoroso de erros nativo e uso de *goroutines* e *channels* para suportar altíssimas cargas de scans paralelos sem bloqueio.
+A opção pelo Go em vez de Python foi baseada em critérios rigorosos de engenharia:
 
-### 2.2 O Motor Base: YARA via CGO (`hillu/go-yara/v4`)
-A primeira camada de defesa foi definida como o YARA, o padrão da indústria para correspondência de padrões (Pattern Matching).
-* **O Desafio do CGO:** Estabelecemos a necessidade de usar CGO para conectar o código Go à biblioteca C nativa do YARA (`libyara`). Isso ditou a necessidade de flags de compilação rigorosas (`-tags yara_static`) estabelecidas para garantir portabilidade.
-* **Soberania de Regras:** O sistema foi desenhado para usar a diretiva `//go:embed` do Go, embutindo as regras YARA diretamente no binário final, eliminando a necessidade de buscar assinaturas na internet em tempo de execução (Air-Gapped Ready).
+- **Binário estático único:** facilita deploy em qualquer Linux (incluindo containers mínimos), sem dependências de interpretador.
+- **Performance de borda:** inicialização em milissegundos e baixo consumo de memória – crucial para dispositivos como Jetson Nano.
+- **Segurança de tipos e concorrência nativa:** tratamento de erros explícito, ausência de exceções, e suporte a *goroutines* para processamento paralelo eficiente.
+- **Ecossistema maduro para CGO:** necessário para integrar bibliotecas C críticas (YARA).
 
-### 2.3 Arquitetura de Eventos (Event-Driven)
-Para transformar o GSS de uma ferramenta CLI simples em um daemon industrial, adotamos uma arquitetura orientada a eventos:
-* **Desacoplamento Assíncrono:** A implementação de um *Event Bus* interno e um *Worker Pool* garante que o motor principal não seja bloqueado durante a análise, permitindo enfileirar milhares de pedidos (buffer de 1000 eventos).
+### 2.2 O Motor Base: YARA via CGO (`github.com/hillu/go-yara/v4`)
+O YARA é o padrão da indústria para correspondência de padrões em binários e texto. A decisão de usá-lo como primeira camada (Tier 1) trouxe desafios:
 
-### 2.4 Transporte Universal (Model Context Protocol - MCP)
-* **Integração Agnóstica:** O GSS expõe suas capacidades de scan nativamente através de um servidor MCP JSON-RPC sobre stdio/HTTP. Isso permite que qualquer IA governante (como o AEGIS no SUTA-IA) utilize o scanner como uma ferramenta segura sem acoplamento de código.
+- **CGO obrigatório:** a ligação com a biblioteca C `libyara` exige flags de compilação específicas (`-tags yara_static`) e cuidados com gerenciamento de memória.
+- **Soberania de regras:** optamos por embutir as regras no binário via `//go:embed`, eliminando a necessidade de acesso externo para carregar assinaturas.
 
-## 3. O MODELO DE TIERING (DEFESA EM PROFUNDIDADE)
+### 2.3 Estrutura de Diretórios (Standard Go Layout)
+Adotamos o layout padrão da comunidade Go para garantir escalabilidade e clareza:
 
-A arquitetura foi concebida para não depender de uma única tecnologia. Desenhamos um funil de análise em múltiplos estágios:
+.
+├── cmd/ # Pontos de entrada (binários)
+│ └── scanner/ # CLI principal
+├── internal/ # Código privado (não importável por outros módulos)
+│ ├── engine/ # Orquestrador dos tiers de análise
+│ ├── yara/ # Módulo YARA (CGO, métricas, stubs)
+│ ├── ast/ # (planejado) Analisador sintático
+│ ├── cache/ # (planejado) Sistema de reputação
+│ ├── audit/ # (planejado) Persistência forense
+│ ├── transport/ # Camada de comunicação (MCP, CLI)
+│ └── events/ # Barramento assíncrono (Worker Pool)
+├── pkg/ # Código público reutilizável
+│ └── schema/ # Contratos de dados (ScanResult, Finding...)
+├── build/ # Artefatos de build (Dockerfile, scripts)
+├── configs/ # Arquivos de configuração exemplo
+└── docs/ # Documentação e memorandos
 
-1. **Camada 1: YARA (Assinaturas Rápidas - Concluído):** Varre o payload em microssegundos procurando padrões conhecidos (ex: `rm -rf /`, `os.system`). Cobertura de testes blindada (>78%).
-2. **Camada 2: AST Analyzer (Árvore Sintática - Próximo Foco):** Se o YARA for evadido por ofuscação (ex: `base64.decode`), o AST desmonta o script para entender sua verdadeira *intenção* estrutural.
-3. **Camada 3: LLM/WASM (Heurística Avançada - Futuro):** Para casos ambíguos, um modelo de linguagem local analisa a semântica do código, submetido a rigoroso controle de provedores e custos.
+### 2.4 Modelo de Defesa em Profundidade (Tiering)
+O sistema foi projetado com múltiplas camadas de análise, cada uma com responsabilidades distintas:
 
-## 4. LIÇÕES APRENDIDAS E PONTOS DE ATENÇÃO (A PONTE PARA A FASE 2)
+| Camada | Responsabilidade | Status |
+|--------|------------------|--------|
+| **Tier 1 (YARA)** | Correspondência rápida de padrões (assinaturas). | ✅ Concluído |
+| **Tier 2 (AST)** | Análise sintática para detectar ofuscação e lógica perigosa. | 🔄 Em progresso |
+| **Tier 3 (LLM/WASM)** | Heurística avançada e sandboxing (futuro). | ⏳ Pendente |
 
-Durante a estabilização da Fase 1 e Sprint 2.5, desafios críticos arquiteturais foram mapeados e superados:
+### 2.5 Arquitetura de Eventos e Concorrência
+Para tornar o GSS um daemon escalável, implementamos um **barramento de eventos assíncrono**:
 
-* **Gerenciamento de Memória C e Segfaults:** Ao acoplar Go com C (YARA), o Go não consegue limpar a memória alocada pelo C automaticamente. Falhas catastróficas de segmentação (SIGSEGV) foram mitigadas exigindo o método `Close()` em todos os motores via `defer` e implementando flags atômicas (`isClosed`) para impedir acessos a ponteiros destruídos.
-* **Import Cycles e Interfaces:** A separação estrita de pacotes (`engine` vs `events`) gerou ciclos de importação. Isso consolidou a adoção do *Dependency Inversion Principle*, forçando o uso de interfaces locais (ex: `ScanExecutor`) para manter a soberania e a modularidade de cada pacote.
-* **Supply Chain de Regras:** A ideia inicial de baixar regras externas via script provou-se frágil. A decisão final foi manter a **Curadoria Interna**, escrevendo e embutindo as regras dentro do próprio repositório.
-* **Interface do Usuário:** A necessidade de parâmetros escaláveis levou à adoção da biblioteca Cobra CLI, abandonando argumentos simples em favor de um padrão industrial com suporte a *Graceful Shutdown* via interrupções de contexto.
-
-## 5. ESTADO ATUAL DA ÁRVORE DE DIRETÓRIOS (MARÇO/2026)
-
-O scaffolding inicial evoluiu para uma estrutura funcional e validada:
-
-```text
-go-skill-scanner/
-├── cmd/scanner/          # (Implementado: main.go com CLI Cobra)
-├── internal/
-│   ├── engine/           # (Implementado: Orquestrador Assíncrono - engine.go)
-│   ├── yara/             # (Implementado: Wrapper CGO, metrics.go, scanner_test.go)
-│   ├── events/           # (Implementado: Event Bus, Worker Pool, Pipeline Async)
-│   ├── transport/mcp/    # (Implementado: JSON-RPC Server & Handler)
-│   ├── ast/              # (Pendente: analisador de árvore sintática)
-│   └── audit/            # (Pendente: persistência forense SQLite)
-├── internal/yara/rules/  # (Implementado: Regras embutidas via go:embed)
-├── pkg/schema/           # (Implementado: scan_result.go e contratos)
-├── build/                # (Implementado: Dockerfile multi-stage estático)
-├── configs/              # (Implementado: default_manifest.json)
-└── go.mod                # (Configurado e Pinado)
-```
+- **Event Bus:** canal de comunicação desacoplado entre componentes.
+- **Worker Pool:** processa scans em paralelo, respeitando limites de recursos.
+- **Graceful Shutdown:** captura de sinais (`SIGINT`, `SIGTERM`) com `signal.NotifyContext` para encerramento limpo, garantindo que o método `Close()` do motor YARA seja chamado antes da saída.
 
 ---
+
+## 3. FUNDAMENTAÇÃO TÉCNICA DAS ESCOLHAS
+
+### 3.1 Por que YARA (e não apenas expressões regulares)?
+YARA permite:
+- **Contexto de strings:** busca por padrões em diferentes partes do payload.
+- **Módulos:** possibilidade de estender com lógica adicional (ex: módulo `pe` para executáveis).
+- **Compilação e otimização:** as regras são compiladas uma única vez e reutilizadas em todos os scans.
+
+### 3.2 Gerenciamento de Memória em CGO
+A integração com C via CGO é a maior fonte de riscos em sistemas Go. As medidas adotadas foram:
+
+- **Lifecycle management explícito:** método `Close()` obrigatório que libera recursos C (destrói regras, fecha handles).
+- **Flag atômica `isClosed`:** para impedir novos scans após o fechamento.
+- **`sync.WaitGroup` no `guard`:** aguarda conclusão de scans ativos antes de destruir recursos.
+- **Idempotência:** `Close()` pode ser chamado múltiplas vezes com segurança.
+
+### 3.3 Observabilidade (Métricas)
+Implementamos contadores lock-free com `sync/atomic` para:
+- `TotalScans`, `TotalBytesScanned`, `TotalMatches`, `TotalErrors`, `AvgScanDurationMs`.
+- Essas métricas são exportáveis via `ScanStats()` e podem ser integradas futuramente com Prometheus.
+
+---
+
+## 4. LIÇÕES APRENDIDAS E ADAPTAÇÕES
+
+### 4.1 A Armadilha da Cadeia de Suprimentos de Regras
+Inicialmente, tentamos baixar regras da Cisco via `curl` em um script `bootstrap.sh`. Isso se mostrou frágil: URLs mudam, e arquivos inválidos (ex: página 404) quebravam a compilação do YARA.
+
+**Solução definitiva:** curadoria interna e `go:embed`. Todas as regras agora residem em `internal/yara/rules/` e são embutidas no binário. Isso garante reprodutibilidade e funcionamento em ambientes sem acesso à internet.
+
+### 4.2 A Importância do `Close()` e da Flag Atômica
+Durante os primeiros testes, esquecemos de chamar `Close()` em alguns caminhos, o que levou a vazamentos de memória (detectados por `valgrind`). Implementamos então:
+
+- `defer engine.Close()` no `main.go`.
+- Verificação `if s.metrics.isClosed()` no início de `Scan()`.
+
+### 4.3 Ciclos de Importação e Interfaces
+No início, o pacote `engine` importava `events` e vice-versa, criando um ciclo. Resolvemos com **injeção de dependência** e interfaces locais: o `engine` agora define interfaces como `ScanExecutor` que são implementadas por outros pacotes, mas não os importa diretamente.
+
+---
+
+## 5. ESTADO ATUAL DO PROJETO (PÓS-SPRINT 1)
+
+- ✅ Módulo YARA completo, testado e integrado.
+- ✅ CLI profissional com Cobra, signal handling e graceful shutdown.
+- ✅ Event Bus e Worker Pool funcionais (testados com concorrência).
+- ✅ Saída rica com ícones, estatísticas e códigos de saída semânticos (0=clean, 1=malicious, 2=suspect, 3=error).
+- ✅ Binário estático com regras embutidas, pronto para deploy em containers.
+
+---
+
+**Próximos Passos (Sprint 2):**
+- Implementar AST Analyzer (Tier 2).
+- Implementar Cache de Reputação (TLSH + SQLite).
+- Expandir cobertura de testes e documentação.
+
+---
+
 **Assinatura Digital:**
-By: Headmaster     
-CTO Integrador & Arquiteto de Sistemas Críticos  
-Projeto: go-skill-scanner
-Documento Fundacional V2
+Headmaster Orquestrador IA
+Arquiteto de Sistemas Críticos
+go-skill-scanner
+2026-03-19

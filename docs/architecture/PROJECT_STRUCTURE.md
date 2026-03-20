@@ -1,4 +1,5 @@
 .
+├── 6.5-Memorando_Único.md
 ├── bootstrap.sh
 ├── build
 │   └── Dockerfile
@@ -12,7 +13,6 @@
 │   ├── architecture
 │   │   ├── ENGINE_MAIN_REFACTORING.md
 │   │   └── PROJECT_STRUCTURE.md
-│   ├── CHECKLIST_OFICIAL.md
 │   ├── CHECK_LIST_PROJECT.md
 │   ├── examples
 │   │   └── yara_integration.go
@@ -22,11 +22,14 @@
 │   │   ├── 03-Engine_Main_Memo_Fase-03.md
 │   │   ├── 04-Event_Bus+Async_Pipeline-V4-Fase-04.md
 │   │   ├── 05-MCP_Intregation-V1.0_Fase-5.md
+│   │   ├── 06,5-Memorando_Único.md
 │   │   ├── 06-MCP+Engine_Evolution-V1.1_Fase6.md
-│   │   └── 07-Tier2_AST+MCP_Stabilization-Fase-07.md
+│   │   ├── 07-Tier2_AST+MCP_Stabilization-Fase-07.md
+│   │   └── 08-Audit_Store_Persistence-Fase-08.md
 │   └── README.md
 ├── go.mod
 ├── go.sum
+├── gss.db
 ├── internal
 │   ├── analyzer
 │   │   └── ast
@@ -37,6 +40,7 @@
 │   │   ├── analyzer.go
 │   │   └── python.go
 │   ├── audit
+│   │   └── queue.go
 │   ├── cache
 │   ├── engine
 │   │   └── engine.go
@@ -46,6 +50,14 @@
 │   │   ├── types.go
 │   │   └── worker.go
 │   ├── llm
+│   │   ├── llm.go
+│   │   ├── provider.go
+│   │   └── providers
+│   │       ├── anthropic
+│   │       ├── gemini
+│   │       ├── ollama
+│   │       │   └── client.go
+│   │       └── openai
 │   ├── manifest
 │   ├── privacy
 │   ├── sandbox
@@ -96,4 +108,4 @@
         ├── test_malicious.py
         └── trigger.py
 
-39 directories, 58 files
+44 directories, 65 files
