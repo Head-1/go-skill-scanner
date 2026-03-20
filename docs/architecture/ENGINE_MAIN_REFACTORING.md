@@ -583,3 +583,9 @@ A refatoração implementou todos os requisitos mandatórios e introduziu padrõ
 Arquiteto de Sistemas   
 go-skill-scanner Project  
 2026-03-12T15:20:00Z
+
+
+Nota: Após esta refatoração, o Engine foi integrado ao Event Bus (consulte o Memorando Fase 04) e ao 
+MCP (consulte os Memorandos Fase 05 e 06). As funcionalidades descritas aqui permanecem inalteradas e 
+servem como base para as extensões posteriores.
+

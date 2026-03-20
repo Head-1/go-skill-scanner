@@ -5,3 +5,5 @@
 bin/
 *.py
 *.bak
+gss.db
+scanner

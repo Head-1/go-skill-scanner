@@ -1,85 +1,44 @@
-# MEMORANDO TÉCNICO: MCP & ENGINE EVOLUTION (v1.1)
-
-**PARA:** Desenvolvedores e Mantenedores do go-skill-scanner (GSS)  
-**DE:** Arquiteto de Sistemas  
-**PROJETO:** go-skill-scanner  
-**DATA:** 2026-03-19  
-**STATUS:** 🟡 EM ANDAMENTO (Bloqueio de Build Resolvido Parcialmente)
-
----
-
-## 1. RESUMO DA EVOLUÇÃO
-
-Desde o memorando anterior (Fase 5), o GSS deixou de ser apenas uma ferramenta CLI simples e evoluiu para um **Daemon Reativo**. As principais conquistas foram:
-
-- Consolidação do **Tier 1 (YARA)** com regras embutidas via `go:embed`, garantindo operação *air-gapped*.
-- Início do scaffolding do **Tier 2 (AST)** para análise estrutural, com instalação de gramáticas C para Python e Bash.
-- Implementação de um **EventBus** nativo para orquestração assíncrona dos tiers.
-- Atingimos **78,8% de cobertura de código**, com o motor processando scans em microssegundos.
-- Criação de um **Makefile industrial** que força a vinculação estática da `libyara`, assegurando portabilidade total do binário `gss-daemon`.
+### 📄 MEMORANDO TÉCNICO: HANDOFF — MCP & ENGINE EVOLUTION (v1.1)
+**PARA:** Headmaster / Engenharia de Sistemas Críticos  
+**DE:** Lead Tech & Arquiteto de Sistemas Críticos  
+**PROJETO:** go-skill-scanner (GSS)  
+**DATA:** 19 de Março de 2026  
+**STATUS:** 🔴 BLOQUEIO DE BUILD (Drift de Contrato)
 
 ---
 
-## 2. PROBLEMAS ENCONTRADOS (CAUSA DO BUILD QUEBRADO)
+#### 1. RESUMO DA EVOLUÇÃO (PÓS-V1.0)
+Desde o memorando inicial do MCP, o GSS deixou de ser uma ferramenta CLI simples para se tornar um **Daemon Reativo**. Consolidamos a soberania do Tier 1 (YARA) com regras embutidas via `go:embed`, garantindo operação *Air-Gapped*. Iniciamos o scaffolding do Tier 2 (AST) para dar "visão estrutural" ao motor, instalando gramáticas C para Python e Bash.
 
-Durante a última tentativa de build, identificamos três problemas de sincronização arquitetural:
+#### 2. AUDITORIA DE CONQUISTAS TÉCNICAS
+*   **Blindagem CGO:** O motor YARA foi estabilizado contra memory leaks através de um gerenciamento rigoroso de ciclo de vida (`Close()` com wait-groups).
+*   **Espinha Dorsal Assíncrona:** Implementamos um `EventBus` nativo para orquestrar os Tiers de segurança sem bloquear a execução principal.
+*   **Qualidade Validada:** Atingimos **78.8% de cobertura de código**, com o motor processando scans em microssegundos.
+*   **Makefile Industrial:** Criamos uma governança de build que força a vinculação estática da `libyara`, garantindo portabilidade total do binário `gss-daemon`.
 
-### 2.1 Drift de Versão do SDK MCP
-O comando `go mod tidy` atualizou o SDK `github.com/mark3labs/mcp-go` para a versão **v0.45.0+**. Esta versão introduziu mudanças de quebra (*breaking changes*):
+#### 3. ANÁLISE DOS PROBLEMAS ATUAIS (POR QUE O BUILD QUEBROU?)
+O erro reportado no seu último `make build` aponta para três falhas de sincronização arquitetural:
 
-- A função `server.NewServer` foi substituída por `server.NewMCPServer`.
-- A definição de propriedades no esquema da ferramenta passou a exigir o tipo `mcp.Property` em vez de mapas genéricos.
+1.  **Drift de Versão do SDK MCP (`undefined: server.NewServer` / `mcp.Property`):** O comando `go mod tidy` atualizou o SDK `mark3labs/mcp-go` para a versão **v0.45.0+**. Esta versão introduziu mudanças de quebra (*breaking changes*) na forma de instanciar o servidor e na tipagem das propriedades das ferramentas (agora exigindo a struct `mcp.Property` em vez de mapas genéricos).
+2.  **Dessincronização do Maestro (`cannot use payload as engine.ScanRequest`):** O motor (Engine) evoluiu. O método `ScanFile` agora é o nosso contrato industrial e ele exige uma struct `engine.ScanRequest` (contendo `Name`, `Payload` e `CallerID`) para garantir a rastreabilidade forense, mas o transporte MCP ainda tenta passar apenas uma `string` pura.
+3.  **Entropia de Namespace:** Identificamos que a interface `Scanner` está sendo duplicada entre `interface.go` e `scanner.go`, causando o erro `redeclared in this block` quando tentamos unificar os arquivos.
 
-**Impacto:** O servidor MCP não compilava mais, gerando erros como `undefined: server.NewServer` e `undefined: mcp.Property`.
+#### 4. ESTADO DOS "AIRBAGS" DE BORDA
+Os 21.2% de cobertura restantes referem-se a proteções de falha crítica:
+*   **isClosed/markClosed:** Verificações atômicas que impedem o acesso à memória C após o desligamento do daemon.
+*   **Backpressure Handlers:** Lógica de descarte de eventos quando o buffer de 1000 mensagens do EventBus está saturado.
 
-### 2.2 Dessincronização do Contrato com o Engine
-O motor (Engine) evoluiu: o método `ScanFile` agora aceita uma struct `engine.ScanRequest` (contendo `Name`, `Payload` e `CallerID`) para garantir rastreabilidade forense. No entanto, o handler MCP ainda tentava passar apenas uma `string` simples, causando o erro `cannot use payload as engine.ScanRequest`.
-
-### 2.3 Entropia de Namespace
-Identificamos que a interface `Scanner` estava definida em dois lugares:
-- `internal/yara/interface.go`
-- `internal/yara/scanner.go`
-
-Isso gerava o erro `redeclared in this block` ao tentar compilar o pacote `yara`.
-
----
-
-## 3. SOLUÇÕES APLICADAS
-
-### 3.1 Sincronização do Transporte MCP
-- Refatoramos `internal/transport/mcp/server.go` para usar `server.NewMCPServer` e ajustamos o esquema da ferramenta para utilizar `map[string]any` compatível com a nova versão do SDK.
-- O handler agora converte o payload recebido em uma `engine.ScanRequest` antes de chamar o motor.
-
-### 3.2 Unificação dos Contratos
-- Removemos o arquivo `internal/yara/interface.go`, mantendo a definição da interface `Scanner` unicamente em `scanner.go` (Single Source of Truth).
-
-### 3.3 Ajustes de Tipagem Forte
-- Aplicamos casts explícitos (`string(result.Verdict.Status)`) nas funções de log e formatação de ícones, conforme exigido pelo compilador Go.
-
-Após essas correções, o build voltou a funcionar e os testes passaram, porém ainda existem pontos de melhoria.
+#### 5. PRÓXIMOS PASSOS PARA SANEAMENTO (ROADMAP)
+Para restaurar a soberania do build, as ordens de marcha são:
+1.  **Sincronizar o Transporte:** Refatorar o `internal/transport/mcp/server.go` para aceitar a nova assinatura do SDK v0.45 e encapsular o payload em uma `ScanRequest` antes de chamar o Engine.
+2.  **Unificar Contratos:** Remover o arquivo `internal/yara/interface.go` obsoleto e manter a Single Source of Truth dentro do `scanner.go`.
+3.  **Ajuste de Tipagem Forte:** Aplicar *type cast* explícito nas funções de log e ícones (`string(result.Verdict.Status)`), conforme exigido pelo rigor do compilador Go.
 
 ---
+*Assinado,*
 
-## 4. ESTADO DOS "AIRBAGS" DE BORDA
-
-Os 21,2% de cobertura restantes referem-se principalmente a proteções de falha crítica:
-
-- **`isClosed` / `markClosed`:** Verificações atômicas que impedem o acesso à memória C após o desligamento do daemon. Ainda não foram adequadamente exercitadas nos testes.
-- **Backpressure Handlers:** Lógica de descarte de eventos quando o buffer do EventBus (1000 mensagens) está saturado. Os caminhos de erro ainda não foram cobertos por testes.
+**Lead Tech & Arquiteto de Sistemas Críticos**  
+*Projeto Go-Skill-Scanner — 2026*
 
 ---
-
-## 5. PRÓXIMOS PASSOS (ROADMAP)
-
-1. **Testar os Airbags de Borda:** Criar testes que simulem shutdown concorrente e estouro de buffer, para elevar a cobertura das funções de ciclo de vida.
-2. **Completar o Context Sharing:** No handler MCP, substituir a resposta textual pelo JSON completo de `schema.ScanResult`.
-3. **Implementar Trace ID Obrigatório:** Exigir um identificador único em cada requisição MCP e propagá-lo até o Audit Store.
-4. **Adicionar mTLS opcional:** Para quem desejar usar o transporte HTTP, disponibilizar uma flag de configuração para ativar Mutual TLS.
-
----
-
-**Assinatura:**
-Arquiteto de Sistemas
-Projeto go-skill-scanner
-2026-03-19
 
