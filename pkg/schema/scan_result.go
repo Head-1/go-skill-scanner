@@ -19,7 +19,7 @@ const (
 type FindingCategory string
 const (
 	CategoryMaliciousPattern FindingCategory = "MALICIOUS_PATTERN"
-	CategoryCodeExecution   FindingCategory = "CODE_EXECUTION"
+	CategoryCodeExecution    FindingCategory = "CODE_EXECUTION"
 	CategoryDataExfiltration FindingCategory = "DATA_EXFILTRATION"
 )
 
@@ -33,14 +33,22 @@ const (
 )
 
 type ScanResult struct {
-	ScanID     string          `json:"scan_id"`
-	ScannedAt  time.Time       `json:"scanned_at"`
-	DurationNs int64           `json:"duration_ns"`
-	Target     TargetInfo      `json:"target"`
-	Verdict    Verdict         `json:"verdict"`
-	RiskScore  float64         `json:"risk_score"`
-	Findings   []Finding       `json:"findings"`
-	Pipeline   PipelineTrace   `json:"pipeline"`
+	ScanID     string        `json:"scan_id"`
+	ScannedAt  time.Time     `json:"scanned_at"`
+	DurationNs int64         `json:"duration_ns"`
+	Target     TargetInfo    `json:"target"`
+	Verdict    Verdict       `json:"verdict"`
+	RiskScore  float64       `json:"risk_score"`
+	Findings   []Finding     `json:"findings"`
+	Pipeline   PipelineTrace `json:"pipeline"`
+	// Audit carrega os metadados de integridade para o Mimir
+	Audit      AuditInfo     `json:"audit"`
+}
+
+type AuditInfo struct {
+	RuleBundleHash  string `json:"rule_bundle_hash"`
+	ResultSignature string `json:"result_signature"`
+	EngineVersion   string `json:"engine_version"`
 }
 
 type TargetInfo struct {

@@ -21,10 +21,16 @@ type eventBusImpl struct {
 }
 
 func NewEventBus(bufferSize int) EventBus {
+	// Tuning conforme check-list: Buffer mínimo de 2000 para evitar drops
+	optimizedBuffer := bufferSize
+	if optimizedBuffer < 2000 {
+		optimizedBuffer = 2000
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	eb := &eventBusImpl{
 		handlers:  make(map[EventType][]Handler),
-		eventChan: make(chan Event, bufferSize),
+		eventChan: make(chan Event, optimizedBuffer),
 		ctx:       ctx,
 		cancel:    cancel,
 	}
@@ -37,7 +43,13 @@ func NewEventBus(bufferSize int) EventBus {
 func (eb *eventBusImpl) Subscribe(eventType EventType, handler Handler) {
 	eb.handlersLock.Lock()
 	defer eb.handlersLock.Unlock()
-	eb.handlers[eventType] = append(eb.handlers[eventType], handler)
+
+	// Priorização: Mimir (Auditor) entra no início da fila para garantir custódia
+	if eventType == "scan.completed" || eventType == "system.log" {
+		eb.handlers[eventType] = append([]Handler{handler}, eb.handlers[eventType]...)
+	} else {
+		eb.handlers[eventType] = append(eb.handlers[eventType], handler)
+	}
 }
 
 func (eb *eventBusImpl) Publish(ctx context.Context, event Event) error {
@@ -53,8 +65,9 @@ func (eb *eventBusImpl) Publish(ctx context.Context, event Event) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(100 * time.Millisecond):
-		return fmt.Errorf("bus overloaded: dropping %s", event.Type())
+	// Timeout expandido para 250ms para absorver rajadas de eventos
+	case <-time.After(250 * time.Millisecond):
+		return fmt.Errorf("bus overloaded: critical backpressure on %s", event.Type())
 	}
 }
 
