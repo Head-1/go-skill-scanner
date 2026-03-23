@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/Head-1/go-skill-scanner/pkg/schema"
 	_ "github.com/mattn/go-sqlite3"

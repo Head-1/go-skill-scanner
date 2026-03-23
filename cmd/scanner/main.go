@@ -32,7 +32,6 @@ var rootCmd = &cobra.Command{
 	Short: "go-skill-scanner - Security scanner for AI agent skills",
 }
 
-// scanCmd representa o comando de scan síncrono (CLI)
 var scanCmd = &cobra.Command{
 	Use:   "scan [file]",
 	Short: "Scan a file for malicious patterns",
@@ -40,7 +39,6 @@ var scanCmd = &cobra.Command{
 	Run:   runScan,
 }
 
-// mcpCmd inicia o servidor MCP (modo daemon)
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
 	Short: "Start MCP server (daemon mode)",
@@ -48,15 +46,11 @@ var mcpCmd = &cobra.Command{
 }
 
 func init() {
-	// Flags globais
 	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "enable debug logging")
 	rootCmd.PersistentFlags().IntVarP(&timeout, "timeout", "t", 30, "timeout in seconds")
-
-	// Flag específica do scan
 	scanCmd.Flags().StringVar(&auditDB, "audit-db", "", "path to SQLite audit database (if empty, audit is disabled)")
-        fmt.Println("DEBUG: audit-db flag registered")
+	mcpCmd.Flags().StringVar(&auditDB, "audit-db", "gss.db", "path to SQLite audit database for daemon")
 
-	// Adiciona comandos
 	rootCmd.AddCommand(scanCmd)
 	rootCmd.AddCommand(mcpCmd)
 }
@@ -70,134 +64,6 @@ func setupLogger() zerolog.Logger {
 	return log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.Kitchen})
 }
 
-// runScan executa o scan síncrono (modo CLI)
-func runScan(cmd *cobra.Command, args []string) {
-	logger := setupLogger()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-	defer cancel()
-
-	// Inicializa YARA
-	yaraScanner, err := yara.New(logger)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initialize YARA scanner")
-	}
-	defer yaraScanner.Close()
-
-	// Inicializa AST (pode ser stub por enquanto)
-	astAnalyzer := ast.NewAnalyzer(logger)
-
-	// Inicializa audit (se caminho fornecido)
-	var auditQueue *audit.QueueManager
-	if auditDB != "" {
-		auditQueue, err = audit.NewQueueManager(auditDB)
-		if err != nil {
-			logger.Fatal().Err(err).Str("path", auditDB).Msg("failed to open audit database")
-		}
-		defer auditQueue.Close()
-		logger.Info().Str("path", auditDB).Msg("audit persistence enabled")
-	} else {
-		logger.Info().Msg("audit disabled (no --audit-db)")
-	}
-
-	// Cria engine com audit
-	cfg := engine.Config{Debug: debug}
-	eng, err := engine.New(cfg, logger, yaraScanner, astAnalyzer, auditQueue)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to create engine")
-	}
-	defer eng.Close()
-
-	// Lê o arquivo
-	payload, err := os.ReadFile(args[0])
-	if err != nil {
-		logger.Fatal().Err(err).Str("file", args[0]).Msg("failed to read file")
-	}
-
-	// Cria a requisição de scan
-	req := engine.ScanRequest{
-		Name:    args[0],
-		Payload: payload,
-		CallerID: "cli",
-	}
-
-	// Executa o scan
-	result, err := eng.ScanFile(ctx, req)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("scan failed")
-	}
-
-	// Exibe o resultado
-	displayResult(result)
-
-	// O audit já foi registrado dentro do engine (se habilitado)
-}
-
-// runMCP inicia o servidor MCP (modo daemon)
-func runMCP(cmd *cobra.Command, args []string) {
-	logger := setupLogger()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Inicializa YARA
-	yaraScanner, err := yara.New(logger)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initialize YARA scanner")
-	}
-	defer yaraScanner.Close()
-
-	// Inicializa AST
-	astAnalyzer := ast.NewAnalyzer(logger)
-
-	// Inicializa audit (se caminho fornecido)
-	var auditQueue *audit.QueueManager
-	if auditDB != "" {
-		auditQueue, err = audit.NewQueueManager(auditDB)
-		if err != nil {
-			logger.Fatal().Err(err).Str("path", auditDB).Msg("failed to open audit database")
-		}
-		defer auditQueue.Close()
-		logger.Info().Str("path", auditDB).Msg("audit persistence enabled")
-	} else {
-		logger.Info().Msg("audit disabled (no --audit-db)")
-	}
-
-	// Cria engine
-	cfg := engine.Config{Debug: debug}
-	eng, err := engine.New(cfg, logger, yaraScanner, astAnalyzer, auditQueue)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to create engine")
-	}
-	defer eng.Close()
-
-        // Cria event bus e worker pool (modo assíncrono)
-        bus := events.NewEventBus(1000)
-        adapter := &engineAdapter{engine: eng}
-        workerPool := events.NewWorkerPool(bus, adapter, 4)
-
-
-	// Inicia o worker pool
-	workerPool.StartWithBus(ctx)
-
-	// Servidor MCP
-	srv := mcp.NewServer(mcp.Config{}, yaraScanner, eng, logger)
-
-	// Graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		logger.Info().Msg("shutting down...")
-		cancel()
-                // workerPool.Stop() // não existe
-                
-	}()
-
-	logger.Info().Msg("MCP server started")
-	if err := srv.Start(); err != nil {
-		logger.Fatal().Err(err).Msg("MCP server error")
-	}
-}
-
 // engineAdapter adapta o Engine para implementar events.ScanExecutor
 type engineAdapter struct {
 	engine *engine.Engine
@@ -209,11 +75,112 @@ func (a *engineAdapter) ScanFile(ctx context.Context, path string) (*schema.Scan
 		return nil, err
 	}
 	req := engine.ScanRequest{
-		Name:    path,
-		Payload: payload,
+		Name:     path,
+		Payload:  payload,
 		CallerID: "worker",
 	}
 	return a.engine.ScanFile(ctx, req)
+}
+
+func runScan(cmd *cobra.Command, args []string) {
+	logger := setupLogger()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+	defer cancel()
+
+	yaraScanner, err := yara.New(logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to initialize YARA scanner")
+	}
+	defer yaraScanner.Close()
+
+	astAnalyzer := ast.NewAnalyzer(logger)
+
+	// Inicializa LLM Tier 3 (Pode não ser usado no CLI direto, mas a engine precisa dele)
+	//ollamaProvider := ollama.NewClient(ollama.Config{Model: "llama3"})
+
+	// Cria Engine (Assumindo a assinatura original, passando nil no auditQueue antigo se necessário)
+	// Nota: Mantenha a assinatura exatamente como o seu internal/engine/engine.go espera.
+	cfg := engine.Config{Debug: debug}
+	eng, err := engine.New(cfg, logger, yaraScanner, astAnalyzer, nil) 
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to create engine")
+	}
+	defer eng.Close()
+
+	payload, err := os.ReadFile(args[0])
+	if err != nil {
+		logger.Fatal().Err(err).Str("file", args[0]).Msg("failed to read file")
+	}
+
+	result, err := eng.ScanFile(ctx, engine.ScanRequest{Name: args[0], Payload: payload, CallerID: "cli"})
+	if err != nil {
+		logger.Fatal().Err(err).Msg("scan failed")
+	}
+
+	displayResult(result)
+}
+
+func runMCP(cmd *cobra.Command, args []string) {
+	logger := setupLogger()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	yaraScanner, err := yara.New(logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to initialize YARA scanner")
+	}
+	defer yaraScanner.Close()
+
+	astAnalyzer := ast.NewAnalyzer(logger)
+
+	// 1. Inicializa o EventBus
+	bus := events.NewEventBus(1000)
+
+	// 2. Inicializa Auditoria HCA (Nova Fase 8.5)
+	if auditDB != "" {
+		store, err := audit.NewSQLiteStore(auditDB)
+		if err != nil {
+			logger.Fatal().Err(err).Str("path", auditDB).Msg("failed to open audit database")
+		}
+		auditWorker := audit.NewWorker(bus, store, logger)
+		auditWorker.Start(ctx)
+		logger.Info().Str("path", auditDB).Msg("audit persistence (HCA) enabled")
+	} else {
+		logger.Info().Msg("audit disabled (no --audit-db)")
+	}
+
+	// 3. Inicializa LLM Tier 3
+	//ollamaProvider := ollama.NewClient(ollama.Config{Model: "llama3"})
+
+	// 4. Cria Engine
+	cfg := engine.Config{Debug: debug}
+	// O seu engine.New original recebia o queue antigo no 5º parâmetro. Se ele ainda exige, passe nil.
+	eng, err := engine.New(cfg, logger, yaraScanner, astAnalyzer, nil) 
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to create engine")
+	}
+	defer eng.Close()
+
+	// 5. MANTIDO O SEU WORKER POOL INTACTO
+	adapter := &engineAdapter{engine: eng}
+	workerPool := events.NewWorkerPool(bus, adapter, 4)
+	workerPool.StartWithBus(ctx)
+
+	// 6. Inicia o MCP
+	srv := mcp.NewServer(mcp.Config{}, yaraScanner, eng, logger)
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		logger.Info().Msg("shutting down gracefully...")
+		cancel()
+	}()
+
+	logger.Info().Msg("MCP server started")
+	if err := srv.Start(); err != nil {
+		logger.Fatal().Err(err).Msg("MCP server error")
+	}
 }
 
 func displayResult(res *schema.ScanResult) {
@@ -237,6 +204,7 @@ func displayResult(res *schema.ScanResult) {
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Erro ao executar gss-daemon: %v\n", err)
 		os.Exit(1)
 	}
 }

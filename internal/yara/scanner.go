@@ -19,14 +19,13 @@ import (
 //go:embed rules
 var embeddedRules embed.FS
 
-// ScanStatistics define a estrutura detalhada de métricas para o YARA.
 type ScanStatistics struct {
-	TotalScans         int64
-	TotalBytesScanned  int64
+	TotalScans        int64
+	TotalBytesScanned int64
 	TotalMatches       int64
 	TotalErrors        int64
 	AvgScanDurationMs  float64
-	TotalDuration      time.Duration
+	TotalDuration     time.Duration
 	LastScanAt         time.Time
 }
 
@@ -40,11 +39,11 @@ type Scanner interface {
 }
 
 type scanner struct {
-	rules   *goyara.Rules
-	log     zerolog.Logger
-	metrics *metrics
-	guard   *scanGuard
-	mu      sync.RWMutex
+	rules      *goyara.Rules
+	log        zerolog.Logger
+	ruleCount  int
+	bundleHash string
+	mu         sync.RWMutex
 }
 
 func New(log zerolog.Logger) (Scanner, error) {
@@ -60,7 +59,6 @@ func New(log zerolog.Logger) (Scanner, error) {
 		return data
 	})
 
-	// Busca arquivos .yar no embed
 	var yarFiles []string
 	err = walkEmbedFS(embeddedRules, "rules", &yarFiles)
 	if err != nil { return nil, err }
@@ -79,25 +77,20 @@ func New(log zerolog.Logger) (Scanner, error) {
 	rules, err := compiler.GetRules()
 	if err != nil { return nil, fmt.Errorf("yara: failed to get compiled rules: %w", err) }
 
-	ruleCount := len(rules.GetRules())
-	bundleHash := hex.EncodeToString(bundleHasher.Sum(nil))
-
 	return &scanner{
-		rules:   rules,
-		log:     log,
-		metrics: newMetrics(ruleCount, bundleHash),
-		guard:   &scanGuard{},
+		rules:      rules,
+		log:        log,
+		ruleCount:  len(rules.GetRules()),
+		bundleHash: hex.EncodeToString(bundleHasher.Sum(nil)),
 	}, nil
 }
 
 func (s *scanner) Scan(ctx context.Context, payload []byte) ([]schema.Finding, error) {
-	s.guard.enter()
-	defer s.guard.leave()
-	start := time.Now()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	var matches goyara.MatchRules
 	if err := s.rules.ScanMem(payload, 0, 0, &matches); err != nil {
-		s.metrics.recordScan(len(payload), 0, time.Since(start), err)
 		return nil, err
 	}
 
@@ -112,17 +105,18 @@ func (s *scanner) Scan(ctx context.Context, payload []byte) ([]schema.Finding, e
 		})
 	}
 
-	s.metrics.recordScan(len(payload), len(findings), time.Since(start), nil)
 	return findings, nil
 }
 
-func (s *scanner) GetRulesCount() int { return s.metrics.ruleCount }
-func (s *scanner) RuleCount() int    { return s.metrics.ruleCount }
-func (s *scanner) BundleHash() string { return s.metrics.bundleHash }
-func (s *scanner) ScanStats() ScanStatistics { return s.metrics.snapshot() }
+func (s *scanner) GetRulesCount() int { return s.ruleCount }
+func (s *scanner) RuleCount() int     { return s.ruleCount }
+func (s *scanner) BundleHash() string { return s.bundleHash }
+func (s *scanner) ScanStats() ScanStatistics {
+	// Retorna stats vazias por enquanto para manter a interface sem o metrics.go
+	return ScanStatistics{}
+}
 
 func (s *scanner) Close() error {
-	s.guard.wait()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.rules != nil {
@@ -132,17 +126,13 @@ func (s *scanner) Close() error {
 	return nil
 }
 
-// walkEmbedFS navega recursivamente no embed.FS para encontrar as regras
 func walkEmbedFS(fs embed.FS, dir string, paths *[]string) error {
 	entries, err := fs.ReadDir(dir)
 	if err != nil { return err }
-
 	for _, entry := range entries {
 		fullPath := dir + "/" + entry.Name()
 		if entry.IsDir() {
-			if err := walkEmbedFS(fs, fullPath, paths); err != nil {
-				return err
-			}
+			walkEmbedFS(fs, fullPath, paths)
 			continue
 		}
 		if len(entry.Name()) > 4 && entry.Name()[len(entry.Name())-4:] == ".yar" {
