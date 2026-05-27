@@ -10,6 +10,7 @@ const (
 )
 
 type VerdictStatus string
+
 const (
 	VerdictClean     VerdictStatus = "CLEAN"
 	VerdictSuspect   VerdictStatus = "SUSPECT"
@@ -17,6 +18,7 @@ const (
 )
 
 type FindingCategory string
+
 const (
 	CategoryMaliciousPattern FindingCategory = "MALICIOUS_PATTERN"
 	CategoryCodeExecution    FindingCategory = "CODE_EXECUTION"
@@ -24,6 +26,7 @@ const (
 )
 
 type Severity string
+
 const (
 	SeverityInfo     Severity = "INFO"
 	SeverityLow      Severity = "LOW"
@@ -41,14 +44,7 @@ type ScanResult struct {
 	RiskScore  float64       `json:"risk_score"`
 	Findings   []Finding     `json:"findings"`
 	Pipeline   PipelineTrace `json:"pipeline"`
-	// Audit carrega os metadados de integridade para o Mimir
 	Audit      AuditInfo     `json:"audit"`
-}
-
-type AuditInfo struct {
-	RuleBundleHash  string `json:"rule_bundle_hash"`
-	ResultSignature string `json:"result_signature"`
-	EngineVersion   string `json:"engine_version"`
 }
 
 type TargetInfo struct {
@@ -87,4 +83,10 @@ type LayerTrace struct {
 
 type ManifestResult struct {
 	Valid bool `json:"valid"`
+}
+
+type AuditInfo struct {
+	RuleBundleHash  string `json:"rule_bundle_hash"`
+	ResultSignature string `json:"result_signature"`
+	EngineVersion   string `json:"engine_version"`
 }

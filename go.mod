@@ -7,6 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hillu/go-yara/v4 v4.3.4
 	github.com/mark3labs/mcp-go v0.45.0
+	github.com/mattn/go-sqlite3 v1.14.37
 	github.com/rs/zerolog v1.34.0
 	github.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82
 	github.com/spf13/cobra v1.10.2

@@ -1,7 +1,6 @@
 package events
 
 import (
-	"context" // Adicionado
 	"time"
 	"github.com/Head-1/go-skill-scanner/pkg/schema"
 )
@@ -9,33 +8,33 @@ import (
 type EventType string
 
 const (
-	EventTypeScanRequested EventType = "scan.requested"
-	EventTypeScanCompleted EventType = "scan.completed"
+	ScanRequested EventType = "scan.requested"
+	ScanCompleted EventType = "scan.completed"
 )
 
 type Event interface {
 	Type() EventType
+	Payload() interface{}
 }
 
-type EventBus interface {
-	Publish(ctx context.Context, event Event) error
-	Subscribe(eventType EventType, handler Handler)
-	Shutdown(ctx context.Context) error
-}
-
-type ScanRequested struct {
+// ScanRequestedEvent - Struct do evento
+type ScanRequestedEvent struct {
 	ScanID    string    `json:"scan_id"`
 	Path      string    `json:"path"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
-func (e ScanRequested) Type() EventType { return EventTypeScanRequested }
+func (e ScanRequestedEvent) Type() EventType     { return ScanRequested }
+func (e ScanRequestedEvent) Payload() interface{} { return e.Path }
 
-type ScanCompleted struct {
-	ScanID   string             `json:"scan_id"`
-	Path     string             `json:"path"`
-	Result   *schema.ScanResult `json:"result"`
-	Duration time.Duration      `json:"duration"`
+// ScanCompletedEvent - Struct do evento
+type ScanCompletedEvent struct {
+	Result *schema.ScanResult
 }
 
-func (e ScanCompleted) Type() EventType { return EventTypeScanCompleted }
+func (e ScanCompletedEvent) Type() EventType     { return ScanCompleted }
+func (e ScanCompletedEvent) Payload() interface{} { return e.Result }
+
+func NewScanCompletedEvent(res *schema.ScanResult) ScanCompletedEvent {
+	return ScanCompletedEvent{Result: res}
+}

@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+// EventBus define o contrato para o barramento de eventos.
+type EventBus interface {
+	Publish(ctx context.Context, event Event) error
+	Subscribe(eventType EventType, handler Handler)
+	Shutdown(ctx context.Context) error
+}
+
 type Handler func(ctx context.Context, event Event) error
 
 type eventBusImpl struct {
@@ -45,7 +52,7 @@ func (eb *eventBusImpl) Subscribe(eventType EventType, handler Handler) {
 	defer eb.handlersLock.Unlock()
 
 	// Priorização: Mimir (Auditor) entra no início da fila para garantir custódia
-	if eventType == "scan.completed" || eventType == "system.log" {
+	if eventType == ScanCompleted {
 		eb.handlers[eventType] = append([]Handler{handler}, eb.handlers[eventType]...)
 	} else {
 		eb.handlers[eventType] = append(eb.handlers[eventType], handler)
@@ -65,7 +72,6 @@ func (eb *eventBusImpl) Publish(ctx context.Context, event Event) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	// Timeout expandido para 250ms para absorver rajadas de eventos
 	case <-time.After(250 * time.Millisecond):
 		return fmt.Errorf("bus overloaded: critical backpressure on %s", event.Type())
 	}
